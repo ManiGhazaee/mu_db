@@ -7,6 +7,7 @@ use std::{
 
 const TEST_FILE_PATH: &str = "./test.rsdb";
 
+#[derive(Clone)]
 pub struct Index {
     entries: Vec<IndexEntry>,
 }
@@ -15,8 +16,42 @@ impl Index {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+    pub fn insert_entry(&mut self, entry_size: usize, key: String) -> IndexEntry {
+        for i in 0..self.entries.len() - 1 {
+            if (self.entries[i + 1].range.start - self.entries[i].range.end) >= entry_size {
+                let bind = &self.entries[i];
+                let entry = IndexEntry {
+                    key,
+                    range: bind.range.end..bind.range.end + entry_size,
+                };
+                self.entries.insert(i + 1, entry.clone());
+                return entry;
+            }
+        }
+
+        let range_start = if let Some(e) = self.entries.last() {
+            e.range.end
+        } else {
+            0
+        };
+        let entry = IndexEntry {
+            key,
+            range: range_start..range_start + entry_size,
+        };
+        self.entries.push(entry.clone());
+        return entry;
+    }
+    pub fn remove_entry(&mut self, key: String) -> Option<IndexEntry> {
+        for (i, entry) in self.entries.iter().enumerate() {
+            if entry.key == key {
+                return Some(self.entries.remove(i));
+            }
+        }
+        None
+    }
 }
 
+#[derive(Clone)]
 pub struct IndexEntry {
     key: String,
     range: Range<usize>,

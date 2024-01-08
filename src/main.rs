@@ -11,11 +11,13 @@ fn main() -> Result<()> {
 
     let inst = Instant::now();
 
-    db.write_at(0, "x\nx\n")?;
-    db.write_at(6, "x\nx\n")?;
-    db.write_at(0, "y\n")?;
+    // db.insert("key".to_string(), "hello world".to_string());
+    // db.insert("bluh".to_string(), "hello flkjs".to_string());
+    // db.insert("value".to_string(), "xxxxxxxxxxxxslkjfksjfworld".to_string());
+    let x = db.get("key".to_string());
 
     println!("{}", inst.elapsed().as_millis());
+    println!("{}", x.unwrap());
 
     Ok(())
 }

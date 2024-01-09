@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{File, OpenOptions},
     io::{BufReader, BufWriter, Read, Result, Seek, SeekFrom, Write},
     ops::Range,
     sync::{Arc, Mutex},
@@ -33,7 +33,45 @@ impl Index {
         self.entries.is_empty()
     }
     pub fn insert_entry(&mut self, entry_size: usize, key: &str) -> IndexEntry {
+        // get entry if exists with index:
+        let mut old_entry = (0, None);
+        for (i, entry) in self.entries.iter().enumerate() {
+            if entry.key == key {
+                old_entry = (i, Some(entry.clone()));
+                break;
+            }
+        }
+
+        match old_entry.1 {
+            Some(old) => {
+                if old.size() < entry_size {
+                    self.entries.remove(old_entry.0);
+                    return self.alloc_entry(entry_size, key);
+                } else {
+                    let entry = IndexEntry {
+                        key: key.to_string(),
+                        range: old.range.start..old.range.start + entry_size,
+                    };
+                    self.entries[old_entry.0] = entry.clone();
+                    self.write_index();
+                    return entry;
+                }
+            }
+            None => return self.alloc_entry(entry_size, key),
+        }
+    }
+    pub fn alloc_entry(&mut self, entry_size: usize, key: &str) -> IndexEntry {
+        // find a empty range that new entry will fit then allocate:
         if !self.is_empty() {
+            if self.entries[0].range.start >= entry_size {
+                let entry = IndexEntry {
+                    key: key.to_string(),
+                    range: 0..entry_size,
+                };
+                self.entries.insert(0, entry.clone());
+                self.write_index();
+                return entry;
+            }
             for i in 0..self.entries.len() - 1 {
                 if (self.entries[i + 1].range.start - self.entries[i].range.end) >= entry_size {
                     let bind = &self.entries[i];
@@ -47,6 +85,8 @@ impl Index {
                 }
             }
         }
+
+        // else if entry doesnt fit:
         let range_start = if let Some(e) = self.entries.last() {
             e.range.end
         } else {
@@ -74,21 +114,30 @@ impl Index {
         self.entries.iter().find(|i| i.key == key).cloned()
     }
     pub fn write_index(&mut self) {
+        let string = Index::index_to_string(self);
+        let mut binding = self.writer.lock().unwrap();
+        let w = binding.get_mut();
+        w.seek(SeekFrom::Start(0)).unwrap();
+        w.set_len(0).unwrap();
+        w.write_all(string.as_bytes()).unwrap();
+    }
+    pub fn index_to_string(index: &Index) -> String {
         let mut str = String::new();
-        for i in self.entries.iter() {
+        for i in index.entries.iter() {
             str.push_str(&i.key);
             str.push('=');
             let range = [i.range.start.to_string(), i.range.end.to_string()].join("_");
             str.push_str(&range);
             str.push('\n');
         }
-        fs::write("index.rsdb", str).unwrap();
+        str
     }
     pub fn parse_index(file: String) -> Vec<IndexEntry> {
         if file.is_empty() {
             Vec::new()
         } else {
-            let entries: Vec<IndexEntry> = file.trim_end()
+            let entries: Vec<IndexEntry> = file
+                .trim_end()
                 .split("\n")
                 .map(|i| {
                     let entry: Vec<&str> = i.split("=").collect();
@@ -105,6 +154,10 @@ impl Index {
                 .collect();
             entries
         }
+    }
+    pub fn clear_all(&mut self) {
+        self.entries.clear();
+        self.writer.lock().unwrap().get_mut().set_len(0).unwrap();
     }
 }
 
@@ -159,13 +212,13 @@ impl DataBase {
         bw.flush()?;
         Ok(())
     }
-    pub fn insert(&mut self, key: String, value: String) {
+    pub fn insert(&mut self, key: &str, value: &str) {
         let value_len = value.len();
         let index_entry = self.index.insert_entry(value_len, &key);
-        self.write_at(index_entry.range.start.try_into().unwrap(), &value)
+        self.write_at(index_entry.range.start.try_into().unwrap(), value)
             .unwrap();
     }
-    pub fn get(&mut self, key: String) -> Option<String> {
+    pub fn get(&mut self, key: &str) -> Option<String> {
         let index_entry = self.index.get_entry(&key);
         match index_entry {
             Some(e) => Some(
@@ -175,5 +228,26 @@ impl DataBase {
             None => None,
         }
     }
-    // pub fn remove(&mut self, key: String) {}
+    pub fn clear_all(&mut self) -> Result<()> {
+        self.reader
+            .lock()
+            .unwrap()
+            .get_mut()
+            .seek(SeekFrom::Start(0))?;
+        self.reader.lock().unwrap().get_mut().set_len(0)?;
+
+        self.writer
+            .lock()
+            .unwrap()
+            .get_mut()
+            .seek(SeekFrom::Start(0))?;
+        self.writer.lock().unwrap().get_mut().set_len(0)?;
+
+        self.index.clear_all();
+
+        Ok(())
+    }
+    pub fn remove(&mut self, key: &str) {
+        self.index.remove_entry(&key);
+    }
 }

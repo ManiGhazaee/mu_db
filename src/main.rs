@@ -11,13 +11,23 @@ fn main() -> Result<()> {
 
     let inst = Instant::now();
 
-    // db.insert("key".to_string(), "hello world".to_string());
-    // db.insert("bluh".to_string(), "hello flkjs".to_string());
-    // db.insert("value".to_string(), "xxxxxxxxxxxxslkjfksjfworld".to_string());
-    let x = db.get("key".to_string());
+    db.insert("x1", "yyyyyy");
+    let x1 = db.get("x1");
+    db.insert("x2", "xxxxxxxx");
+    let x2 = db.get("x2");
+    db.insert("x3", "zzzzzzzzzzzzzz");
+    let x3 = db.get("x3");
+    db.remove("x3");
+    db.insert("x4", "uuuuuuuuu");
+    db.remove("x1");
+    db.insert("x5", "iii");
+    db.remove("key");
+    db.insert("new_key", "bluh");
 
-    println!("{}", inst.elapsed().as_millis());
-    println!("{}", x.unwrap());
+    println!("{}micros", inst.elapsed().as_micros());
+    println!("{:?}", x1);
+    println!("{:?}", x2);
+    println!("{:?}", x3);
 
     Ok(())
 }

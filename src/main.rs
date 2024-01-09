@@ -9,25 +9,40 @@ mod db;
 fn main() -> Result<()> {
     let mut db = DataBase::new();
 
+    // let mut str = String::new();
+
     let inst = Instant::now();
+    // db.clear_all().unwrap();
 
-    db.insert("x1", "yyyyyy");
-    let x1 = db.get("x1");
-    db.insert("x2", "xxxxxxxx");
-    let x2 = db.get("x2");
-    db.insert("x3", "zzzzzzzzzzzzzz");
-    let x3 = db.get("x3");
-    db.remove("x3");
-    db.insert("x4", "uuuuuuuuu");
-    db.remove("x1");
-    db.insert("x5", "iii");
-    db.remove("key");
-    db.insert("new_key", "bluh");
-
+    // db.insert("1", "one".repeat(200000).as_str());
+    // db.insert("2", "two".repeat(300000).as_str());
+    // db.insert("3", "three".repeat(4000000).as_str());
+    db.remove("3");
+    // db.insert("4", "four".repeat(50000).as_str());
+    // db.insert("5", "five".repeat(800000).as_str());
+    // db.insert("6", "six".repeat(900000).as_str());
     println!("{}micros", inst.elapsed().as_micros());
-    println!("{:?}", x1);
-    println!("{:?}", x2);
-    println!("{:?}", x3);
+
+    // str.push_str(db.get("3").unwrap().as_str());
+    // str.push_str(db.get("4").unwrap().as_str());
+    // str.push_str(db.get("5").unwrap().as_str());
+    // str.push_str(db.get("6").unwrap().as_str());
+
+    let inst = Instant::now();
+    db.shrink();
+    println!("{}micros", inst.elapsed().as_micros());
+
+    // let mut str_after = String::new();
+
+    // str_after.push_str(db.get("3").unwrap().as_str());
+    // str_after.push_str(db.get("4").unwrap().as_str());
+    // str_after.push_str(db.get("5").unwrap().as_str());
+    // str_after.push_str(db.get("6").unwrap().as_str());
+
+    // assert_eq!(str, str_after);
+    // println!("{:?}", x1);
+    // println!("{:?}", x2);
+    // println!("{:?}", x3);
 
     Ok(())
 }

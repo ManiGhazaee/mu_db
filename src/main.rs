@@ -7,6 +7,7 @@ use toy_db::DataBase;
 fn main() -> Result<()> {
     let mut db = DataBase::new("./test.db");
 
+
     // let mut str = String::new();
 
     let inst = Instant::now();

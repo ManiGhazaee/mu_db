@@ -28,9 +28,10 @@ impl DataBase {
     /// Creates a new instance of the database or uses the existing db file,
     /// at the given path.
     /// # Example
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
     /// ```
+    /// let db = toy_db::DataBase::new("./test.db");
+    /// ```
+    /// Generates (`./test.db`) and (`./index_test.db`) if doesn't exist.
     pub fn new(path: &str) -> Self {
         let file = OpenOptions::new()
             .read(true)
@@ -43,11 +44,13 @@ impl DataBase {
 
         let _path = Path::new(path);
         let db_file_name = _path.file_name().and_then(|i| i.to_str()).unwrap();
-        let index_file_path = format!(
-            "{}/{}",
-            _path.parent().unwrap().to_str().unwrap(),
-            format!("index_{}", db_file_name)
-        );
+        let db_file_parent = _path
+            .parent()
+            .unwrap()
+            .to_str()
+            .and_then(|i| if i == "" { Some(".") } else { Some(i) })
+            .unwrap();
+        let index_file_path = format!("{}/{}", db_file_parent, format!("index_{}", db_file_name));
 
         let index = Index::new(&index_file_path);
 
@@ -59,9 +62,12 @@ impl DataBase {
     }
     /// Reads data directly from the database file at the specified position (`start`) and size (`size`).
     /// # Example
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
-    /// let value: Result<String> = db.read_at(2, 10);
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// db.insert("k1", "hello");
+    /// db.insert("k2", "world");
+    /// assert_eq!(db.read_at(5, 5).unwrap(), "world".to_string());
     /// ```
     pub fn read_at(&mut self, start: u64, size: usize) -> Result<String> {
         let mut v = vec![0; size];
@@ -72,9 +78,11 @@ impl DataBase {
     }
     /// Writes data directly to the database file at the specified position with any length.
     /// # Example
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
-    /// db.write_at(20, "hello").unwrap();
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// db.write_at(5, "world").unwrap();
+    /// assert_eq!(db.read_at(5, 5).unwrap(), "world".to_string());
     /// ```
     pub fn write_at(&mut self, start: u64, content: &str) -> Result<()> {
         let mut bw = self.writer.lock().unwrap();
@@ -84,9 +92,13 @@ impl DataBase {
         Ok(())
     }
     /// Inserts a key-value pair into the database, replacing old value if key exists.
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
-    /// db.insert("key", "value");
+    /// # Example
+    ///
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.insert("key", "before");
+    /// db.insert("key", "after");
+    /// assert_eq!(db.get("key"), Some("after".to_string()));
     /// ```
     pub fn insert(&mut self, key: &str, value: &str) {
         let value_len = value.len();
@@ -95,9 +107,11 @@ impl DataBase {
             .unwrap();
     }
     /// Retrieves the value associated with the given key from the database.
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
-    /// let key: Option<String> = db.get("key");
+    /// # Example
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.insert("key", "value");
+    /// assert_eq!(db.get("key"), Some("value".to_string()));
     /// ```
     pub fn get(&mut self, key: &str) -> Option<String> {
         let index_entry = self.index.get_entry(&key);
@@ -110,9 +124,15 @@ impl DataBase {
         }
     }
     /// Clears all data in the database.
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
+    /// # Example
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.insert("key", "value");
+    /// assert!(!db.is_empty());
+    /// assert!(!db.is_buf_empty());
     /// db.clear_all().unwrap();
+    /// assert!(db.is_empty());
+    /// assert!(db.is_buf_empty());
     /// ```
     pub fn clear_all(&mut self) -> Result<()> {
         self.set_len(0);
@@ -121,9 +141,18 @@ impl DataBase {
         Ok(())
     }
     /// Sets the length of the database file directly, truncating or extending it as necessary.
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
+    /// # Example
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// assert!(db.is_buf_empty());
+    /// assert_eq!(db.buf_len(), 0);
+    /// db.insert("key", "value");
+    /// assert_eq!(db.buf_len(), 5);
+    /// assert!(!db.is_buf_empty());
     /// db.set_len(0);
+    /// assert_eq!(db.buf_len(), 0);
+    /// assert!(db.is_buf_empty());
     /// ```
     pub fn set_len(&mut self, len: u64) {
         let mut binding_r = self.reader.lock().unwrap();
@@ -138,20 +167,40 @@ impl DataBase {
     /// Removes the entry associated with the given key from the index if the key exists.
     /// This method does not remove the value in the database file. To completely remove the value,
     /// you need to use (`.shrink()`) after removing the entry.
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
+    /// # Example
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.insert("key", "value");
+    /// assert_eq!(db.get("key"), Some("value".to_string()));
     /// db.remove("key");
+    /// assert_eq!(db.get("key"), None);
     /// ```
     pub fn remove(&mut self, key: &str) {
         self.index.remove_entry(&key);
     }
     /// Optimizes the database file by removing any unused space.
-    /// ```no_run
-    /// let db = DataBase::new("./test.db");
+    /// # Example
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// db.insert("k1", "1".repeat(10).as_str());
+    /// db.insert("k2", "2".repeat(10).as_str());
+    /// assert_eq!(db.buf_len(), 20);
+    /// db.remove("k1");
+    /// assert_eq!(db.buf_len(), 20);
+    /// db.insert("k3", "3".repeat(5).as_str());
+    /// assert_eq!(db.buf_len(), 20);
     /// db.shrink();
+    /// assert_eq!(db.buf_len(), 15);
+    /// db.remove("k2");
+    /// db.remove("k3");
+    /// assert_eq!(db.buf_len(), 15);
+    /// db.shrink();
+    /// assert_eq!(db.buf_len(), 0);
     /// ```
     pub fn shrink(&mut self) {
         if self.index.is_empty() {
+            self.clear_all().unwrap();
             return;
         }
 
@@ -172,6 +221,57 @@ impl DataBase {
                 .try_into()
                 .unwrap(),
         );
+    }
+    /// Returns `true` if `self.index.entries` is empty, and `false` otherwise.
+    ///
+    /// If you want to know if db file is empty, use (`.is_buf_empty()`).
+    /// # Example
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// db.insert("key", "value");
+    /// assert!(!db.is_empty());
+    /// assert!(!db.is_buf_empty());
+    /// db.remove("key");
+    /// assert!(db.is_empty());
+    /// assert!(!db.is_buf_empty());
+    /// db.shrink();
+    /// assert!(db.is_empty());
+    /// assert!(db.is_buf_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.index.is_empty()
+    }
+    /// Returns `true` if db file has metadata length of 0, and `false` otherwise.
+    /// # Example
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// assert!(db.is_buf_empty());
+    /// db.insert("key", "value");
+    /// assert!(!db.is_buf_empty());
+    /// ```
+    pub fn is_buf_empty(&self) -> bool {
+        self.buf_len() == 0
+    }
+    /// Returns the length of the db file matadata.
+    /// # Example
+    /// ```
+    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// db.insert("key", "value");
+    /// assert_eq!(db.buf_len(), 5);
+    /// db.clear_all();
+    /// assert_eq!(db.buf_len(), 0);
+    /// ```
+    pub fn buf_len(&self) -> u64 {
+        self.reader
+            .lock()
+            .unwrap()
+            .get_mut()
+            .metadata()
+            .unwrap()
+            .len()
     }
 }
 

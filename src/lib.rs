@@ -27,8 +27,10 @@ pub struct IndexEntry {
 impl DataBase {
     /// Creates a new instance of the database or uses the existing db file,
     /// at the given path.
-    /// # Examples
-    ///
+    /// # Example
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// ```
     pub fn new(path: &str) -> Self {
         let file = OpenOptions::new()
             .read(true)
@@ -56,6 +58,11 @@ impl DataBase {
         }
     }
     /// Reads data directly from the database file at the specified position (`start`) and size (`size`).
+    /// # Example
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// let value: Result<String> = db.read_at(2, 10);
+    /// ```
     pub fn read_at(&mut self, start: u64, size: usize) -> Result<String> {
         let mut v = vec![0; size];
         let mut br = self.reader.lock().unwrap();
@@ -64,6 +71,11 @@ impl DataBase {
         Ok(String::from_utf8_lossy(&v).into())
     }
     /// Writes data directly to the database file at the specified position with any length.
+    /// # Example
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// db.write_at(20, "hello").unwrap();
+    /// ```
     pub fn write_at(&mut self, start: u64, content: &str) -> Result<()> {
         let mut bw = self.writer.lock().unwrap();
         bw.seek(SeekFrom::Start(start))?;
@@ -72,6 +84,10 @@ impl DataBase {
         Ok(())
     }
     /// Inserts a key-value pair into the database, replacing old value if key exists.
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// db.insert("key", "value");
+    /// ```
     pub fn insert(&mut self, key: &str, value: &str) {
         let value_len = value.len();
         let index_entry = self.index.insert_entry(value_len, &key);
@@ -79,6 +95,10 @@ impl DataBase {
             .unwrap();
     }
     /// Retrieves the value associated with the given key from the database.
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// let key: Option<String> = db.get("key");
+    /// ```
     pub fn get(&mut self, key: &str) -> Option<String> {
         let index_entry = self.index.get_entry(&key);
         match index_entry {
@@ -90,6 +110,10 @@ impl DataBase {
         }
     }
     /// Clears all data in the database.
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// db.clear_all().unwrap();
+    /// ```
     pub fn clear_all(&mut self) -> Result<()> {
         self.set_len(0);
         self.index.clear_all();
@@ -97,6 +121,10 @@ impl DataBase {
         Ok(())
     }
     /// Sets the length of the database file directly, truncating or extending it as necessary.
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// db.set_len(0);
+    /// ```
     pub fn set_len(&mut self, len: u64) {
         let mut binding_r = self.reader.lock().unwrap();
         let mut binding_w = self.writer.lock().unwrap();
@@ -110,10 +138,18 @@ impl DataBase {
     /// Removes the entry associated with the given key from the index if the key exists.
     /// This method does not remove the value in the database file. To completely remove the value,
     /// you need to use (`.shrink()`) after removing the entry.
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// db.remove("key");
+    /// ```
     pub fn remove(&mut self, key: &str) {
         self.index.remove_entry(&key);
     }
     /// Optimizes the database file by removing any unused space.
+    /// ```no_run
+    /// let db = DataBase::new("./test.db");
+    /// db.shrink();
+    /// ```
     pub fn shrink(&mut self) {
         if self.index.is_empty() {
             return;

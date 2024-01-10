@@ -2,11 +2,9 @@ use std::{
     fs::{File, OpenOptions},
     io::{BufReader, BufWriter, Read, Result, Seek, SeekFrom, Write},
     ops::Range,
+    path::Path,
     sync::{Arc, Mutex},
 };
-
-const TEST_DB_PATH: &str = "./test.db";
-const TEST_INDEX_PATH: &str = "./test-index.db";
 
 pub struct DataBase {
     index: Index,
@@ -27,17 +25,29 @@ pub struct IndexEntry {
 }
 
 impl DataBase {
-    pub fn new() -> Self {
+    /// Creates a new instance of the database or uses the existing db file,
+    /// at the given path.
+    /// # Examples
+    ///
+    pub fn new(path: &str) -> Self {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(TEST_INDEX_PATH)
+            .open(path)
             .unwrap();
 
         let file_clone = file.try_clone().unwrap();
 
-        let index = Index::new();
+        let _path = Path::new(path);
+        let db_file_name = _path.file_name().and_then(|i| i.to_str()).unwrap();
+        let index_file_path = format!(
+            "{}/{}",
+            _path.parent().unwrap().to_str().unwrap(),
+            format!("index_{}", db_file_name)
+        );
+
+        let index = Index::new(&index_file_path);
 
         DataBase {
             index,
@@ -45,6 +55,7 @@ impl DataBase {
             writer: Arc::new(Mutex::new(BufWriter::new(file_clone))),
         }
     }
+    /// Reads data directly from the database file at the specified position (`start`) and size (`size`).
     pub fn read_at(&mut self, start: u64, size: usize) -> Result<String> {
         let mut v = vec![0; size];
         let mut br = self.reader.lock().unwrap();
@@ -52,6 +63,7 @@ impl DataBase {
         br.read_exact(&mut v)?;
         Ok(String::from_utf8_lossy(&v).into())
     }
+    /// Writes data directly to the database file at the specified position with any length.
     pub fn write_at(&mut self, start: u64, content: &str) -> Result<()> {
         let mut bw = self.writer.lock().unwrap();
         bw.seek(SeekFrom::Start(start))?;
@@ -59,12 +71,14 @@ impl DataBase {
         bw.flush()?;
         Ok(())
     }
+    /// Inserts a key-value pair into the database, replacing old value if key exists.
     pub fn insert(&mut self, key: &str, value: &str) {
         let value_len = value.len();
         let index_entry = self.index.insert_entry(value_len, &key);
         self.write_at(index_entry.range.start.try_into().unwrap(), value)
             .unwrap();
     }
+    /// Retrieves the value associated with the given key from the database.
     pub fn get(&mut self, key: &str) -> Option<String> {
         let index_entry = self.index.get_entry(&key);
         match index_entry {
@@ -75,12 +89,14 @@ impl DataBase {
             None => None,
         }
     }
+    /// Clears all data in the database.
     pub fn clear_all(&mut self) -> Result<()> {
         self.set_len(0);
         self.index.clear_all();
 
         Ok(())
     }
+    /// Sets the length of the database file directly, truncating or extending it as necessary.
     pub fn set_len(&mut self, len: u64) {
         let mut binding_r = self.reader.lock().unwrap();
         let mut binding_w = self.writer.lock().unwrap();
@@ -91,9 +107,13 @@ impl DataBase {
         r.set_len(len).unwrap();
         w.set_len(len).unwrap();
     }
+    /// Removes the entry associated with the given key from the index if the key exists.
+    /// This method does not remove the value in the database file. To completely remove the value,
+    /// you need to use (`.shrink()`) after removing the entry.
     pub fn remove(&mut self, key: &str) {
         self.index.remove_entry(&key);
     }
+    /// Optimizes the database file by removing any unused space.
     pub fn shrink(&mut self) {
         if self.index.is_empty() {
             return;
@@ -120,12 +140,12 @@ impl DataBase {
 }
 
 impl Index {
-    pub fn new() -> Self {
+    pub fn new(path: &str) -> Self {
         let mut index_file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(TEST_INDEX_PATH)
+            .open(path)
             .unwrap();
         let mut index_string = String::new();
         index_file.read_to_string(&mut index_string).unwrap();

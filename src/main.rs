@@ -2,22 +2,20 @@
 
 use std::{io::Result, time::Instant};
 
-use crate::db::DataBase;
-
-mod db;
+use toy_db::DataBase;
 
 fn main() -> Result<()> {
-    let mut db = DataBase::new();
+    let mut db = DataBase::new("./test.db");
 
     // let mut str = String::new();
 
     let inst = Instant::now();
     // db.clear_all().unwrap();
 
-    // db.insert("1", "one".repeat(200000).as_str());
+    db.insert("1", "one".repeat(200000).as_str());
     // db.insert("2", "two".repeat(300000).as_str());
     // db.insert("3", "three".repeat(4000000).as_str());
-    db.remove("3");
+    // db.remove("3");
     // db.insert("4", "four".repeat(50000).as_str());
     // db.insert("5", "five".repeat(800000).as_str());
     // db.insert("6", "six".repeat(900000).as_str());

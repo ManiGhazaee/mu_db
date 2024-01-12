@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "toy_db"
+name = "mu_db"
 version = "0.0.1"

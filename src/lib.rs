@@ -1,3 +1,44 @@
+//! # muDB 
+//!
+//! - [DataBase] is a simple, lightweight database that provides basic database functionalities, and can be created using the new function, which takes a path to the database file as an argument.
+//! - The database supports basic operations such as inserting key-value pairs, retrieving values, removing entries, and clearing all data.
+//! - It also offers advanced features like direct read/write operations at specified positions, checking if the database or buffer is empty, and optimizing the database file by removing unused space.
+//!
+//! ## Examples
+//!
+//! ```
+//! let mut db = mu_db::DataBase::new("./test.db");
+//! // This will generate ./test.db and ./index_test.db if they don't exist.
+//!
+//! db.insert("key", "before_value");
+//! db.insert("key", "after_value");
+//!
+//! let value = db.get("key");
+//! assert_eq!(value, Some("after_value".to_string()));
+//!
+//! db.remove("key");
+//!
+//! assert_eq!(db.get("key"), None);
+//! assert!(db.is_empty()); // index is empty
+//! assert!(!db.is_buf_empty()); // db is not empty
+//! assert_eq!(db.buf_len(), 12); // db: `after_valuee`
+//!
+//! db.shrink(); // remove unused space
+//! assert!(db.is_buf_empty());
+//!
+//! db.write_at(5, "world").unwrap(); // write to db file directly without syncing index
+//! let data = db.read_at(5, 5).unwrap(); // read db file directly
+//!
+//! assert_eq!(data, "world".to_string());
+//!
+//! db.clear_all().unwrap(); // clear everything (index and db)
+//!
+//! assert!(db.is_empty());
+//! assert!(db.is_buf_empty());
+//! ```
+//!
+//! Please note that the mu_db is a simple, lightweight database and does not support complex database operations like transactions, joins, etc. It is best suited for simple key-value storage needs.
+
 use std::{
     fs::{File, OpenOptions},
     io::{BufReader, BufWriter, Read, Result, Seek, SeekFrom, Write},
@@ -29,7 +70,7 @@ impl DataBase {
     /// at the given path.
     /// # Example
     /// ```
-    /// let db = toy_db::DataBase::new("./test.db");
+    /// let db = mu_db::DataBase::new("./test.db");
     /// ```
     /// Generates (`./test.db`) and (`./index_test.db`) if doesn't exist.
     pub fn new(path: &str) -> Self {
@@ -60,42 +101,12 @@ impl DataBase {
             writer: Arc::new(Mutex::new(BufWriter::new(file_clone))),
         }
     }
-    /// Reads data directly from the database file at the specified position (`start`) and size (`size`).
-    /// # Example
-    /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
-    /// db.clear_all();
-    /// db.insert("k1", "hello");
-    /// db.insert("k2", "world");
-    /// assert_eq!(db.read_at(5, 5).unwrap(), "world".to_string());
-    /// ```
-    pub fn read_at(&mut self, start: u64, size: usize) -> Result<String> {
-        let mut v = vec![0; size];
-        let mut br = self.reader.lock().unwrap();
-        br.seek(SeekFrom::Start(start))?;
-        br.read_exact(&mut v)?;
-        Ok(String::from_utf8_lossy(&v).into())
-    }
-    /// Writes data directly to the database file at the specified position with any length.
-    /// # Example
-    /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
-    /// db.clear_all();
-    /// db.write_at(5, "world").unwrap();
-    /// assert_eq!(db.read_at(5, 5).unwrap(), "world".to_string());
-    /// ```
-    pub fn write_at(&mut self, start: u64, content: &str) -> Result<()> {
-        let mut bw = self.writer.lock().unwrap();
-        bw.seek(SeekFrom::Start(start))?;
-        bw.write_all(content.as_bytes())?;
-        bw.flush()?;
-        Ok(())
-    }
+
     /// Inserts a key-value pair into the database, replacing old value if key exists.
     /// # Example
     ///
     /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// let mut db = mu_db::DataBase::new("./test.db");
     /// db.insert("key", "before");
     /// db.insert("key", "after");
     /// assert_eq!(db.get("key"), Some("after".to_string()));
@@ -109,7 +120,7 @@ impl DataBase {
     /// Retrieves the value associated with the given key from the database.
     /// # Example
     /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// let mut db = mu_db::DataBase::new("./test.db");
     /// db.insert("key", "value");
     /// assert_eq!(db.get("key"), Some("value".to_string()));
     /// ```
@@ -123,53 +134,12 @@ impl DataBase {
             None => None,
         }
     }
-    /// Clears all data in the database.
-    /// # Example
-    /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
-    /// db.insert("key", "value");
-    /// assert!(!db.is_empty());
-    /// assert!(!db.is_buf_empty());
-    /// db.clear_all().unwrap();
-    /// assert!(db.is_empty());
-    /// assert!(db.is_buf_empty());
-    /// ```
-    pub fn clear_all(&mut self) -> Result<()> {
-        self.set_len(0);
-        self.index.clear_all();
-
-        Ok(())
-    }
-    /// Sets the length of the database file directly, truncating or extending it as necessary.
-    /// # Example
-    /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
-    /// db.clear_all();
-    /// assert!(db.is_buf_empty());
-    /// assert_eq!(db.buf_len(), 0);
-    /// db.insert("key", "value");
-    /// assert_eq!(db.buf_len(), 5);
-    /// assert!(!db.is_buf_empty());
-    /// db.set_len(0);
-    /// assert_eq!(db.buf_len(), 0);
-    /// assert!(db.is_buf_empty());
-    /// ```
-    pub fn set_len(&mut self, len: u64) {
-        let mut binding_r = self.reader.lock().unwrap();
-        let mut binding_w = self.writer.lock().unwrap();
-        let r = binding_r.get_mut();
-        let w = binding_w.get_mut();
-        r.seek(SeekFrom::Start(0)).unwrap();
-        w.seek(SeekFrom::Start(0)).unwrap();
-        r.set_len(len).unwrap();
-        w.set_len(len).unwrap();
-    }
     /// Removes the entry associated with the given key from the index if the key exists.
     /// This method does not remove the value in the database file. To completely remove the value,
     /// you need to use (`.shrink()`) after removing the entry.
     /// # Example
     /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// let mut db = mu_db::DataBase::new("./test.db");
     /// db.insert("key", "value");
     /// assert_eq!(db.get("key"), Some("value".to_string()));
     /// db.remove("key");
@@ -178,10 +148,27 @@ impl DataBase {
     pub fn remove(&mut self, key: &str) {
         self.index.remove_entry(&key);
     }
+    /// Clears all data in the database.
+    /// # Example
+    /// ```
+    /// let mut db = mu_db::DataBase::new("./test.db");
+    /// db.insert("key", "value");
+    /// assert!(!db.is_empty());
+    /// assert!(!db.is_buf_empty());
+    /// db.clear_all().unwrap();
+    /// assert!(db.is_empty());
+    /// assert!(db.is_buf_empty());
+    /// ```
+    pub fn clear_all(&mut self) -> Result<()> {
+        self.set_buf_len(0);
+        self.index.clear_all();
+
+        Ok(())
+    }
     /// Optimizes the database file by removing any unused space.
     /// # Example
     /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// let mut db = mu_db::DataBase::new("./test.db");
     /// db.clear_all();
     /// db.insert("k1", "1".repeat(10).as_str());
     /// db.insert("k2", "2".repeat(10).as_str());
@@ -216,18 +203,50 @@ impl DataBase {
             }
         }
 
-        self.set_len(
+        self.set_buf_len(
             (self.index.entries.last().unwrap().range.end)
                 .try_into()
                 .unwrap(),
         );
+    }
+
+    /// Reads data directly from the database file at the specified position (`start`) and size (`size`).
+    /// # Example
+    /// ```
+    /// let mut db = mu_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// db.insert("k1", "hello");
+    /// db.insert("k2", "world");
+    /// assert_eq!(db.read_at(5, 5).unwrap(), "world".to_string());
+    /// ```
+    pub fn read_at(&mut self, start: u64, size: usize) -> Result<String> {
+        let mut v = vec![0; size];
+        let mut br = self.reader.lock().unwrap();
+        br.seek(SeekFrom::Start(start))?;
+        br.read_exact(&mut v)?;
+        Ok(String::from_utf8_lossy(&v).into())
+    }
+    /// Writes data directly to the database file at the specified position with any length.
+    /// # Example
+    /// ```
+    /// let mut db = mu_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// db.write_at(5, "world").unwrap();
+    /// assert_eq!(db.read_at(5, 5).unwrap(), "world".to_string());
+    /// ```
+    pub fn write_at(&mut self, start: u64, content: &str) -> Result<()> {
+        let mut bw = self.writer.lock().unwrap();
+        bw.seek(SeekFrom::Start(start))?;
+        bw.write_all(content.as_bytes())?;
+        bw.flush()?;
+        Ok(())
     }
     /// Returns `true` if `self.index.entries` is empty, and `false` otherwise.
     ///
     /// If you want to know if db file is empty, use (`.is_buf_empty()`).
     /// # Example
     /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// let mut db = mu_db::DataBase::new("./test.db");
     /// db.clear_all();
     /// db.insert("key", "value");
     /// assert!(!db.is_empty());
@@ -239,13 +258,14 @@ impl DataBase {
     /// assert!(db.is_empty());
     /// assert!(db.is_buf_empty());
     /// ```
+    ///
     pub fn is_empty(&self) -> bool {
         self.index.is_empty()
     }
     /// Returns `true` if db file has metadata length of 0, and `false` otherwise.
     /// # Example
     /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// let mut db = mu_db::DataBase::new("./test.db");
     /// db.clear_all();
     /// assert!(db.is_buf_empty());
     /// db.insert("key", "value");
@@ -257,7 +277,7 @@ impl DataBase {
     /// Returns the length of the db file matadata.
     /// # Example
     /// ```
-    /// let mut db = toy_db::DataBase::new("./test.db");
+    /// let mut db = mu_db::DataBase::new("./test.db");
     /// db.clear_all();
     /// db.insert("key", "value");
     /// assert_eq!(db.buf_len(), 5);
@@ -272,6 +292,30 @@ impl DataBase {
             .metadata()
             .unwrap()
             .len()
+    }
+    /// Sets the length of the database file directly, truncating or extending it as necessary.
+    /// # Example
+    /// ```
+    /// let mut db = mu_db::DataBase::new("./test.db");
+    /// db.clear_all();
+    /// assert!(db.is_buf_empty());
+    /// assert_eq!(db.buf_len(), 0);
+    /// db.insert("key", "value");
+    /// assert_eq!(db.buf_len(), 5);
+    /// assert!(!db.is_buf_empty());
+    /// db.set_buf_len(0);
+    /// assert_eq!(db.buf_len(), 0);
+    /// assert!(db.is_buf_empty());
+    /// ```
+    pub fn set_buf_len(&mut self, len: u64) {
+        let mut binding_r = self.reader.lock().unwrap();
+        let mut binding_w = self.writer.lock().unwrap();
+        let r = binding_r.get_mut();
+        let w = binding_w.get_mut();
+        r.seek(SeekFrom::Start(0)).unwrap();
+        w.seek(SeekFrom::Start(0)).unwrap();
+        r.set_len(len).unwrap();
+        w.set_len(len).unwrap();
     }
 }
 

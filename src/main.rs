@@ -2,7 +2,7 @@
 
 use std::{io::Result, time::Instant};
 
-use toy_db::DataBase;
+use mu_db::DataBase;
 
 fn main() -> Result<()> {
     let mut db = DataBase::new("./test.db");

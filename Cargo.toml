@@ -2,6 +2,13 @@
 name = "mu_db"
 version = "0.0.1"
 edition = "2021"
+repository = "https://github.com/ManiGhazaee/mu_db"
+authors = ["ManiGhazaee <hosseinghazaee1@gmail.com>"]
+description = "A simple and lightweight key-value based database"
+readme = "README.md"
+license = "MIT"
+keywords = ["database", "storage"]
+
 
 [lib]
 name = "mu_db"
